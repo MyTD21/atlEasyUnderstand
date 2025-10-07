@@ -54,7 +54,7 @@ graph LR
 
 - mask
 
-  有mask的地方加上一个负无穷的数，让他失效；
+  这里的mask是一个上三角矩阵，乘以负无穷，再和qk的结果相加；
   
 - cross attention
 
