@@ -30,6 +30,35 @@ graph LR
 - 单个样本是指，在d_model这个层面算均值方差这些；每个词嵌入都是自己内部归一化，"爱"和"吃"各自算各自的均值，和其他字没关系；
 - 文本序列长度不固定，如果在batchNorm计算会受到padding的影响；
 - 会在均值方差的基础上，加一点偏移，缩放之类的操作；
+
+### FeedForward
+- 两个标准的矩阵操作
+
+  out1 = x @ self.w1 + self.b1  # 第一层：Linear + ReLU → [batch, seq, d_ff]
+
+  out1 = np.maximum(out1, 0)  # ReLU激活
+
+  out2 = out1 @ self.w2 + self.b2 # 第二层：Linear → [batch, seq, d_model]
+
+### MultiHeadAttention
+- 对输入x进行投影，得到q,k,v矩阵;
+- scaled_dot_product
+
+    scores = np.matmul(q, k.transpose(...)) / math.sqrt(d_k) # q,k本是(10, 256),计算后得到(10, 10)的矩阵
+
+    attn_weights = np.exp(scores) / np.exp(scores).sum(axis=-1, keepdims=True) #softmax
+
+    attn_output = np.matmul(attn_weights, v) # qk结果再乘以v
+
+    ret = attn_out @ self.w_o #输出投影
+
+- mask
+
+  有mask的地方加上一个负无穷的数，让他失效；
+  
+- cross attention
+
+  cross attention的k，v用encoder的输出，q用自己的；
   
 ### encoders
 - 一般是多个encoder，encoder1的输出，作为encoder2的输入；
