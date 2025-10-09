@@ -55,6 +55,18 @@ class RNN:
         
         return np.array(outputs), h_prev  # outputs形状：(seq_len, batch_size, output_size)
 
+def greedy_decode(outputs: np.ndarray) -> np.ndarray:
+    """
+    贪心算法解码：逐时间步选择概率最高的token索引
+    :param outputs: LSTM输出，形状(seq_len, batch_size, output_size)
+    :return: 解码后的序列（token索引），形状(batch_size, seq_len)
+    """
+    # 对每个时间步、每个样本，取output_size维度的最大值索引
+    # outputs.shape: (seq_len, batch_size, output_size) → 沿axis=2取argmax
+    token_indices = np.argmax(outputs, axis=2)  # 结果形状: (seq_len, batch_size)
+    # 转置为(batch_size, seq_len)，方便按样本查看序列
+    return token_indices.transpose(1, 0)
+
 
 # 测试示例
 if __name__ == "__main__":
@@ -85,4 +97,5 @@ if __name__ == "__main__":
     # 输出形状验证
     print(f"输入序列形状: {x.shape}")              # (3, 2, 10)
     print(f"输出序列形状: {outputs.shape}")         # (3, 2, 5)
+    print(f"输出得分最大的序列 {greedy_decode(outputs)}")
     print(f"最终隐藏状态形状: {h_final.shape}")     # (20, 2)
