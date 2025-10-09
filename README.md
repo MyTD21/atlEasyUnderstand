@@ -16,9 +16,55 @@ y_t = W_hy·h_t + b_y
 
     t=2（输入 “机器”）：h_2 融合了 “我”“喜欢”“机器” 的信息；
 
-- y_t是输出，即我们要计算的目标；在预测任务中，y_t就是输出的概率，譬如我们的词典共有n个词，则y_t是一个n维向量，其中分最高的那一维，就是这一次最可能的词；
+- y_t是输出，即我们要计算的目标；在预测任务中，y_t就是输出的概率，譬如我们的词典共有n个词，则y_t是一个n维向量，其中分最高的那一维，就是这一次的预测结果；
 - 若输入是 “我 喜欢 机器”，t=4的h_4包含 “我喜欢机器” 的信息，假设接下来很可能预测到"学"，则y_t是一个向量，向量中代表"学"的那一维，得分最高；
+- 贪心算法中，将每个t时刻得分最高的预测结果连起来，就是最终的结果；
 
+# lstm
+## 核心原理说明
+- rnn的升级版，rnn仅有一套w_xh，w_hh，lstm有四套，作用分别是遗忘门，输入门，输出门，细胞候选状态；
+- 代码
+  ```python
+    def forward(self, x: np.ndarray, h_prev: np.ndarray, c_prev: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        i = sigmoid(np.dot(self.W_xi, x) + np.dot(self.W_hi, h_prev) + self.b_i)
+        f = sigmoid(np.dot(self.W_xf, x) + np.dot(self.W_hf, h_prev) + self.b_f)
+        o = sigmoid(np.dot(self.W_xo, x) + np.dot(self.W_ho, h_prev) + self.b_o)
+        c_tilde = np.tanh(np.dot(self.W_xc, x) + np.dot(self.W_hc, h_prev) + self.b_c)
+      """
+        i，f，o，分别用于获得输入门，遗忘门和输出门；
+        c_tilde是信息载体, 前边的ifo都是门，只有这个是可能被写入细胞状态的 “候选内容”；
+      """
+  
+        c = f * c_prev + i * c_tilde
+      """
+        f 乘以 长期记忆(c_prev), i乘以当前信息载体(c_tilde),这个c是保留长期记忆的；
+        遗忘prev，输入c_tilde；
+      """
+  
+        h = o * np.tanh(c) # 有多少信息需要被 “提取” 到隐藏状态h，用于当前的输出 y，这个h是保留短期记忆的；
+        y = np.dot(self.W_hy, h) + self.b_y #获取最终输出为y
+        y = softmax(y.T)
+        return y, h, c
+
+    for t in range(seq_len): #遍历整个seq_len
+        x_t = x_seq[t].T
+        y_t, h, c = self.forward(x_t, h, c)
+        outputs.append(y_t)`
+    ```
+## QA
+- 为什么forward函数中，门都用激活函数sigmoid，信息载体用tanh
+
+    sigmoid 的输出范围是 (0, 1)，适合做开关，tanh 的输出范围是 (-1, 1)，且以 0 为中心，适合表示信息载体；
+  
+- h_prev和c_prev的区别和联系是什么?
+
+  h_prev是上一时间步隐藏状态，短期记忆，变化较快；们信号和候选信息直接依赖于h_prev；
+
+  c_prev是上一时间步细胞状态，长期记忆，变化较慢；
+
+  h = o * np.tanh(c)，h_prev是从c_prev中计算得到的，更能表示最近信息的状态信息；
+  
+ 
 # transformer 
 ## 关于模拟计算
 - 本项目仅作示范，所有模型参数/矩阵未经过训练，用random_matrix随机生成一个矩阵；
