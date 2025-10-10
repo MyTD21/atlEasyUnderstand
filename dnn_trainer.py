@@ -1,7 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch import Tensor
 import numpy as np
+
+from torch.optim.optimizer import Optimizer, required
+import math
 
 # DNN模型定义
 class DNN(nn.Module):
@@ -18,13 +22,131 @@ class DNN(nn.Module):
         x = self.fc3(x)  # 回归问题，输出层不使用激活函数
         return x
 
+
+class MyMSELoss(nn.Module): # 自定义均方误差损失类，接口和功能与nn.MSELoss完全一致,支持直接替换代码中的nn.MSELoss
+    def __init__(self, reduction: str = "mean") -> None:
+        """
+        初始化损失函数
+        reduction: 损失聚合方式，可选值：mean, sum, none
+        """
+        super().__init__()
+        self.reduction = reduction
+
+    def forward(self, y_pred: Tensor, y_true: Tensor) -> Tensor:
+        """
+        Args:
+            y_pred: 模型预测值张量，形状需与y_true一致
+            y_true: 真实值（ground truth）张量，形状需与y_pred一致
+
+        Returns:
+            聚合后的损失值（或原始平方误差张量）
+
+        """
+        # 检查输入形状是否匹配
+        if y_pred.shape != y_true.shape:
+            raise RuntimeError(f"预测值形状 {y_pred.shape} 与真实值形状 {y_true.shape} 不匹配")
+
+        # 计算每个元素的平方误差：(y_pred - y_true)²
+        squared_error = (y_pred - y_true) **2
+
+        # 根据初始化时的reduction参数聚合结果
+        if self.reduction == "mean":
+            return squared_error.mean()
+        elif self.reduction == "sum":
+            return squared_error.sum()
+        else:  # 'none'
+            return squared_error
+
+class MyAdam(Optimizer): # 自定义Adam优化器，完全兼容PyTorch原生optim.Adam的接口和行为, 论文：https://arxiv.org/abs/1412.6980v8
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0): # 初始化
+        """
+        Args:
+            params: 待优化的参数迭代器（如model.parameters()）
+            lr: 学习率（默认1e-3）
+            betas: 一阶矩和二阶矩的指数衰减率（默认(0.9, 0.999)）
+            eps: 数值稳定性常数，避免除零（默认1e-8）
+            weight_decay: 权重衰减（L2正则化）系数（默认0）
+        """
+        # 构造超参数字典
+        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay)
+        super(MyAdam, self).__init__(params, defaults)
+
+    def step(self, closure=None):
+        """
+        执行单步参数更新
+
+        Args:
+            closure: 可选的闭包函数，用于重新计算损失（用于某些特殊场景）
+
+        Returns:
+            损失值（如果提供了closure）
+        """
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+
+        # 遍历所有参数组（支持多参数组配置）
+        for group in self.param_groups:
+            # 获取当前组的超参数
+            lr = group['lr']
+            beta1, beta2 = group['betas']
+            eps = group['eps']
+            weight_decay = group['weight_decay']
+
+            # 遍历组内所有参数
+            for p in group['params']:
+                if p.grad is None:
+                    continue  # 无梯度的参数跳过更新
+                grad = p.grad.data  # 获取梯度数据
+
+                # 初始化参数状态（一阶矩、二阶矩、时间步）
+                state = self.state[p]
+                if len(state) == 0:
+                    state['step'] = 0  # 时间步t，初始为0
+                    # 一阶矩估计（动量）
+                    state['exp_avg'] = torch.zeros_like(p.data)
+                    # 二阶矩估计（梯度平方的移动平均）
+                    state['exp_avg_sq'] = torch.zeros_like(p.data)
+
+                # 取出状态变量
+                exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
+                state['step'] += 1  # 时间步+1
+                t = state['step']
+
+                # 权重衰减（L2正则化）：等价于参数先乘以(1 - lr*weight_decay)
+                if weight_decay != 0:
+                    grad = grad.add(p.data, alpha=weight_decay)
+
+                # 更新一阶矩：exp_avg = beta1 * exp_avg + (1 - beta1) * grad
+                exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+                # 更新二阶矩：exp_avg_sq = beta2 * exp_avg_sq + (1 - beta2) * grad^2
+                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+
+                # 偏差修正：由于初始时刻矩的估计值偏向0，需要修正
+                # 修正后的一阶矩：exp_avg / (1 - beta1^t)
+                # 修正后的二阶矩：exp_avg_sq / (1 - beta2^t)
+                bias_correction1 = 1 - beta1 **t
+                bias_correction2 = 1 - beta2** t
+                step_size = lr / bias_correction1  # 修正后的学习率步长
+
+                # 计算参数更新：param = param - step_size * exp_avg / (sqrt(exp_avg_sq) + eps)
+                denom = exp_avg_sq.sqrt().add_(eps)  # 分母：sqrt(二阶矩修正值) + eps
+                p.data.addcdiv_(exp_avg, denom, value=-step_size)
+
+        return loss
+
+
+
 class DnnTrainer():
     def __init__(self, model, epochs, ):
         self.model = model
 
         # 训练配置
-        self.criterion = nn.MSELoss()  # 均方误差损失，适用于回归问题
-        self.optimizer = optim.Adam(model.parameters(), lr=0.001)
+        #self.criterion = nn.MSELoss()  # 系统自带mean squared error，均方误差损失，适用于回归问题
+        self.criterion = MyMSELoss()  # 均方误差损失，适用于回归问题
+        #self.optimizer = optim.Adam(model.parameters(), lr=0.001)
+        self.optimizer = MyAdam(model.parameters(), lr=0.001)
         self.epochs = epochs
 
     def train(self, train_loader, test_loader):
