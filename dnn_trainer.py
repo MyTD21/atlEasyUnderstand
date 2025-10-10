@@ -27,19 +27,19 @@ class DnnTrainer():
         self.optimizer = optim.Adam(model.parameters(), lr=0.001)
         self.epochs = epochs
 
-    def train(self):
+    def train(self, train_loader, test_loader):
         train_losses = []
         test_losses = []
 
         # 训练循环
         for epoch in range(self.epochs):
-            model.train()
+            self.model.train()
             total_train_loss = 0
     
             # 训练阶段
             for batch_x, batch_y in train_loader:
                 self.optimizer.zero_grad()
-                outputs = model(batch_x)
+                outputs = self.model(batch_x)
                 loss = self.criterion(outputs, batch_y)
                 loss.backward()
                 self.optimizer.step()
@@ -49,11 +49,11 @@ class DnnTrainer():
             train_losses.append(avg_train_loss)
 
             # 测试阶段
-            model.eval()
+            self.model.eval()
             total_test_loss = 0
             with torch.no_grad():
                 for batch_x, batch_y in test_loader:
-                    outputs = model(batch_x)
+                    outputs = self.model(batch_x)
                     loss = self.criterion(outputs, batch_y)
                     total_test_loss += loss.item()
 
@@ -64,7 +64,7 @@ class DnnTrainer():
                 print(f'Epoch [{epoch+1}/{self.epochs}], 训练损失: {avg_train_loss:.4f}, 测试损失: {avg_test_loss:.4f}')
 
     def predict(self, x_values): # 使用训练好的模型进行预测
-        model.eval()
+        self.model.eval()
         with torch.no_grad():
             x_tensor = torch.tensor([x_values], dtype=torch.float32).view(-1, 1)
             predictions = self.model(x_tensor)
@@ -102,13 +102,13 @@ if __name__ == '__main__':
     train_loader, test_loader = get_data_loader()
 
     # 初始化模型
-    model = DNN(input_size=1, hidden_size=128, output_size=1)
+    dnn_model = DNN(input_size=1, hidden_size=128, output_size=1)
 
     # 初始化训练器
-    trainer = DnnTrainer(model = model, epochs = 200)
+    trainer = DnnTrainer(model = dnn_model, epochs = 200)
 
     print("开始训练DNN模型...")
-    trainer.train()
+    trainer.train(train_loader = train_loader, test_loader = test_loader)
     print("训练完成!")
 
     # 测试
