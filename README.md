@@ -1,3 +1,12 @@
+# dnn
+## 说明
+- 最简单，最基础的神经网络模型，可以做回归任务，可以做分类任务；
+- 核心公式：activation(np.dot(x, weights) + biases)
+
+## 一些基础概念
+- activation是激活函数，目的是引入非线性，常见的有ReLU，sigmoid等；
+- 激活函数是对矩阵每一项都进行，譬如，一个矩阵是2 * 3 * 10，则60个数都要过激活函数；
+
 # rnn
 ## 计算公式
 h_t = tanh(W_xh·x_t + W_hh·h_prev + b_h)
