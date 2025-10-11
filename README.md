@@ -163,8 +163,12 @@ graph LR
 - 加入自制的criterion和optimizer;
 
 ## optimizer，adam
-### 基本原理 & 一阶矩，二阶矩
+### 基本原理
 - Adaptive ​Moment Estimation，自适应矩估计；
+- 他的自适应主要体现在，​每个参数都有不同的、随时间调整的学习率；相比于sgd(全局用一个lr),在当时看起来很先进；
+- sgd做法比较简单粗暴，weight -= learning_rate * grad
+  
+### 一阶矩，二阶矩
 - 一阶矩(exp_avg),模拟动量，惯性；代表参数更新的主要方向；可以不严谨的理解为"行走的方向和决心";
 - 二阶矩(exp_avg_sq), 模拟波动性，描述运动稳定性；如果波动性大，就小步更新，避免震荡；
 - 一阶矩更新公式，exp_avg = beta1 * exp_avg + (1 - beta1) * grad；一般beta1数值较大，能更充分地继承历史信息，从而平滑短期噪声，捕捉梯度的长期趋势;
@@ -172,10 +176,23 @@ graph LR
 
 ### 公式
 ​- 参数更新公式：param = param - step_size * exp_avg / (sqrt(exp_avg_sq) + eps)
-- eps，数值稳定性常数，默认1e-8,分母中加入一个很小的数，避免除零
+- exp_avg,exp_avg_sq,一阶矩，二阶矩;
+- eps，数值稳定性常数，默认1e-8,分母中加入一个很小的数，避免除零;
 - step_size = lr / bias_correction1，经过优化的学习率；
-- bias_correction1 = 1 - beta1^t，修正一阶矩的偏差，在开始阶段，数值较小，于是修改，但t增大时，beta1^t 逐渐趋近于 0；
+- bias_correction1 = 1 - beta1^t，修正一阶矩的偏差，在开始阶段，数值较小，于是修改，但t增大时，beta1^t 逐渐趋近于 0;
 
 ### 权重衰减，L2正则
+- 时机:获取梯度后, 计算动量前;
+- 作用:加入惩罚，避免过拟合;
+- 
+- L2正则公式，L_reg(θ) = L(θ) + λ/2 * ∑θ² (L(θ)是原始的损失函数，L_reg(θ)是正则后的损失函数，θ和p都表示模型参数)
+- 求梯度(新损失函数对每个模型参数θi求偏导)时, 转换为: grad ← grad + λ ⋅ p,即, grad = grad.add(p.data, alpha=weight_decay)
+- 为什么要加上模型参数p.data? 是为了是模型简单，模型不仅要使得grad尽可能的小，也要让参数平方和尽可能的小，进而在满足grad的前提下，尽可能的简单；
+- 
 
-### 参数说明
+### 参数说明 __init__(self, params, lr, betas=(0.9, 0.999), eps=1e-8, weight_decay=0)
+- params: 待优化的参数迭代器（如model.parameters()）
+- lr: 学习率（默认1e-3）
+- betas: 一阶矩和二阶矩的指数衰减率（默认(0.9, 0.999)）,用于调节当前梯度和历史梯度的权重;
+- eps: 数值稳定性常数，默认1e-8,分母中加入一个很小的数，避免除零;
+- weight_decay: 权重衰减（L2正则化）系数;
