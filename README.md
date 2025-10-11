@@ -205,7 +205,8 @@ graph LR
 
 ## criterion，MSE Loss
 ### 原理
-  本质就是计算误差(Mean Squared Error Loss)，公式如下：
+  
+  均方误差损失(Mean Squared Error Loss)，公式如下：
     
         squared_error = (y_pred - y_true) **2
         squared_error = squared_error.mean()，# 根据reduction选择返回mean还是sum；
