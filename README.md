@@ -157,4 +157,25 @@ graph LR
 ### 输出归一化+投影
 - 对decoder的结果进行归一化，并投影到输出维度，(1, 15, 512) -> (1, 15, 10000)
 
+# dnn trainer
+## 说明
+- 简单的dnn模型训练，用dnn来模拟函数，y = 3x² + 5
+- 加入自制的criterion和optimizer;
 
+## optimizer，adam
+### 基本原理 & 一阶矩，二阶矩
+- Adaptive ​Moment Estimation，自适应矩估计；
+- 一阶矩(exp_avg),模拟动量，惯性；代表参数更新的主要方向；可以不严谨的理解为"行走的方向和决心";
+- 二阶矩(exp_avg_sq), 模拟波动性，描述运动稳定性；如果波动性大，就小步更新，避免震荡；
+- 一阶矩更新公式，exp_avg = beta1 * exp_avg + (1 - beta1) * grad；一般beta1数值较大，能更充分地继承历史信息，从而平滑短期噪声，捕捉梯度的长期趋势;
+- 二阶矩更新公式，exp_avg_sq = beta2 * exp_avg_sq + (1 - beta2) * grad^2
+
+### 公式
+​- 参数更新公式：param = param - step_size * exp_avg / (sqrt(exp_avg_sq) + eps)
+- eps，数值稳定性常数，默认1e-8,分母中加入一个很小的数，避免除零
+- step_size = lr / bias_correction1，经过优化的学习率；
+- bias_correction1 = 1 - beta1^t，修正一阶矩的偏差，在开始阶段，数值较小，于是修改，但t增大时，beta1^t 逐渐趋近于 0；
+
+### 权重衰减，L2正则
+
+### 参数说明
