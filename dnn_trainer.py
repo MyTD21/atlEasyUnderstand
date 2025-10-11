@@ -64,28 +64,23 @@ class MyAdam(Optimizer): # 自定义Adam优化器，完全兼容PyTorch原生opt
             params: 待优化的参数迭代器（如model.parameters()）
             lr: 学习率（默认1e-3）
             betas: 一阶矩和二阶矩的指数衰减率（默认(0.9, 0.999)）
-            eps: 数值稳定性常数，避免除零（默认1e-8）
+            eps: 数值稳定性常数，默认1e-8,分母中加入一个很小的数，避免除零
             weight_decay: 权重衰减（L2正则化）系数（默认0）
         """
         # 构造超参数字典
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay)
         super(MyAdam, self).__init__(params, defaults)
 
-    def step(self, closure=None):
-        """
-        执行单步参数更新
+    def zero_grad1(self, set_to_none: bool = False) -> None: # 显式实现梯度清零：清除所有参数的梯度
+        # 参数 set_to_none: 若为True，将param.grad设为None（更高效，不占用内存）; 若为False，将param.grad清零（保持张量结构）
+        # import pdb; pdb.set_trace()
+        for group in self.param_groups: # 遍历所有参数组
+            for p in group['params']: # 遍历组内每个参数
+                if p.grad is not None:  # 仅处理有梯度的参数
+                    p.grad.zero_()
 
-        Args:
-            closure: 可选的闭包函数，用于重新计算损失（用于某些特殊场景）
-
-        Returns:
-            损失值（如果提供了closure）
-        """
-        loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
+    def step1(self, closure=None):
+        # import pdb; pdb.set_trace()
         # 遍历所有参数组（支持多参数组配置）
         for group in self.param_groups:
             # 获取当前组的超参数
@@ -93,23 +88,19 @@ class MyAdam(Optimizer): # 自定义Adam优化器，完全兼容PyTorch原生opt
             beta1, beta2 = group['betas']
             eps = group['eps']
             weight_decay = group['weight_decay']
-
-            # 遍历组内所有参数
-            for p in group['params']:
+            
+            for p in group['params']: # 遍历组内所有参数
                 if p.grad is None:
                     continue  # 无梯度的参数跳过更新
                 grad = p.grad.data  # 获取梯度数据
 
                 # 初始化参数状态（一阶矩、二阶矩、时间步）
                 state = self.state[p]
-                if len(state) == 0:
-                    state['step'] = 0  # 时间步t，初始为0
-                    # 一阶矩估计（动量）
+                if len(state) == 0: # 初始状态，step=0，一阶矩和二阶矩都是0;
+                    state['step'] = 0  
                     state['exp_avg'] = torch.zeros_like(p.data)
-                    # 二阶矩估计（梯度平方的移动平均）
                     state['exp_avg_sq'] = torch.zeros_like(p.data)
 
-                # 取出状态变量
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
                 state['step'] += 1  # 时间步+1
                 t = state['step']
@@ -118,24 +109,19 @@ class MyAdam(Optimizer): # 自定义Adam优化器，完全兼容PyTorch原生opt
                 if weight_decay != 0:
                     grad = grad.add(p.data, alpha=weight_decay)
 
-                # 更新一阶矩：exp_avg = beta1 * exp_avg + (1 - beta1) * grad
-                exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
-                # 更新二阶矩：exp_avg_sq = beta2 * exp_avg_sq + (1 - beta2) * grad^2
-                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+                exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1) # 更新一阶矩：exp_avg = beta1 * exp_avg + (1 - beta1) * grad
+                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2) # 更新二阶矩：exp_avg_sq = beta2 * exp_avg_sq + (1 - beta2) * grad^2
 
                 # 偏差修正：由于初始时刻矩的估计值偏向0，需要修正
                 # 修正后的一阶矩：exp_avg / (1 - beta1^t)
                 # 修正后的二阶矩：exp_avg_sq / (1 - beta2^t)
                 bias_correction1 = 1 - beta1 **t
-                bias_correction2 = 1 - beta2** t
+                bias_correction2 = 1 - beta2 **t
                 step_size = lr / bias_correction1  # 修正后的学习率步长
 
                 # 计算参数更新：param = param - step_size * exp_avg / (sqrt(exp_avg_sq) + eps)
                 denom = exp_avg_sq.sqrt().add_(eps)  # 分母：sqrt(二阶矩修正值) + eps
                 p.data.addcdiv_(exp_avg, denom, value=-step_size)
-
-        return loss
-
 
 
 class DnnTrainer():
@@ -149,6 +135,26 @@ class DnnTrainer():
         self.optimizer = MyAdam(model.parameters(), lr=0.001)
         self.epochs = epochs
 
+    def show_backward_effect(self):
+        x = torch.tensor([2.0], requires_grad=False)  # 输入（不需要梯度）
+        w = torch.tensor([3.0], requires_grad=True)   # 权重（需要梯度）
+        b = torch.tensor([1.0], requires_grad=True)   # 偏置（需要梯度）
+
+        y_pred = w * x + b # 前向传播
+        loss = (y_pred - 10) **2  #计算loss 此时loss = (3*2 + 1 - 10)^2 = (7-10)^2 = 9
+        import pdb; pdb.set_trace()
+
+        print(f"w.grad : {w.grad}, b.grad : {b.grad}")
+
+        # 正向传播时候，计算图会记录输出传输关系，x → (×w) → ( +b ) → y_pred → (MSE) → loss
+        # 调用 loss.backward() 时, PyTorch 会从损失值 loss 出发, 沿着计算图反向遍历, 根据链式法则, 依次计算损失对每个中间变量(如 y_pred、w*x)和参数(w,b)的梯度。
+        # 计算得到的梯度，会被存储于变量的 grad 属性中；
+        loss.backward()
+
+        print(f"w.grad : {w.grad}, b.grad : {b.grad}")
+
+        print(loss)
+
     def train(self, train_loader, test_loader):
         train_losses = []
         test_losses = []
@@ -160,11 +166,12 @@ class DnnTrainer():
     
             # 训练阶段
             for batch_x, batch_y in train_loader:
-                self.optimizer.zero_grad()
+                self.optimizer.zero_grad1()
                 outputs = self.model(batch_x)
                 loss = self.criterion(outputs, batch_y)
                 loss.backward()
-                self.optimizer.step()
+                #self.show_backward_effect()
+                self.optimizer.step1()
                 total_train_loss += loss.item()
 
             avg_train_loss = total_train_loss / len(train_loader)
@@ -177,7 +184,7 @@ class DnnTrainer():
                 for batch_x, batch_y in test_loader:
                     outputs = self.model(batch_x)
                     loss = self.criterion(outputs, batch_y)
-                    total_test_loss += loss.item()
+                    total_test_loss += loss.item() # loss.item()提取loss的数值
 
             avg_test_loss = total_test_loss / len(test_loader)
             test_losses.append(avg_test_loss)
@@ -213,6 +220,7 @@ def get_data_loader():
 
     # 创建数据加载器
     batch_size = 32
+    #batch_size = 1 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size)
 
