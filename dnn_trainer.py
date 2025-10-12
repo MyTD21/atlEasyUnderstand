@@ -124,6 +124,59 @@ class MyAdam(Optimizer): # 自定义Adam优化器，完全兼容PyTorch原生opt
                 p.data.addcdiv_(exp_avg, denom, value=-step_size)
 
 
+class MySGD(Optimizer):
+    """
+    自定义SGD优化器，支持动量和权重衰减，与torch.optim.SGD接口和功能完全一致
+
+    参数:
+        params (iterable): 待优化的参数迭代器（如model.parameters()）
+        lr (float): 学习率（必填，无默认值）
+        momentum (float, 可选): 动量因子，范围[0, 1)，默认0（不使用动量）
+        weight_decay (float, 可选): 权重衰减系数（L2正则化），默认0
+    """
+    def __init__(self, params, lr=required, momentum=0, weight_decay=0):
+        # 检查超参数合法性,已省略
+        # 包装超参数（与PyTorch原生SGD保持一致的参数结构）
+        defaults = dict(lr=lr, momentum=momentum, weight_decay=weight_decay)
+        super(MySGD, self).__init__(params, defaults)
+
+    def zero_grad1(self):
+        super(MySGD, self).zero_grad()
+
+    def step1(self, closure=None):
+        # 遍历所有参数组（支持不同参数设置不同学习率/动量等）
+        for group in self.param_groups:
+            lr = group['lr']
+            momentum = group['momentum']
+            weight_decay = group['weight_decay']
+
+            for p in group['params']: # 遍历组内每个参数
+                if p.grad is None:
+                    continue  # 无梯度的参数跳过更新
+ 
+                grad = p.grad.data.detach() # 获取参数梯度（分离计算图，避免修改原梯度）
+                param = p.data  # 参数值（不含梯度信息）
+
+                if weight_decay != 0: # 应用权重衰减（L2正则化）：梯度 += weight_decay * 参数值
+                    grad.add_(param, alpha=weight_decay)
+
+                # 应用动量：v = momentum * v_prev + grad（v为动量缓存）
+                if momentum != 0:
+                    # 初始化动量缓存（存储在self.state中，以参数p为键）
+                    state = self.state[p]
+                    if 'momentum_buffer' not in state:
+                        # 首次迭代：动量缓存 = 梯度（无历史值）
+                        buf = state['momentum_buffer'] = torch.clone(grad).detach()
+                    else:
+                        # 非首次迭代：动量 = 动量因子 * 历史缓存 + 当前梯度
+                        buf = state['momentum_buffer']
+                        buf.mul_(momentum).add_(grad)  # buf = momentum * buf + grad
+
+                    grad = buf # 用动量缓存替代原始梯度进行更新
+
+                # 核心更新公式：param = param - lr * grad
+                param.add_(grad, alpha=-lr)
+
 class DnnTrainer():
     def __init__(self, model, epochs, ):
         self.model = model
@@ -131,8 +184,11 @@ class DnnTrainer():
         # 训练配置
         #self.criterion = nn.MSELoss()  # 系统自带mean squared error，均方误差损失，适用于回归问题
         self.criterion = MyMSELoss()  # 均方误差损失，适用于回归问题
+
         #self.optimizer = optim.Adam(model.parameters(), lr=0.001)
         self.optimizer = MyAdam(model.parameters(), lr=0.001)
+        #self.optimizer = MySGD(model.parameters(), lr=0.0001, momentum=0.0,)
+
         self.epochs = epochs
 
     def show_backward_effect(self):
