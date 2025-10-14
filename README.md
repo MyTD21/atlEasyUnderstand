@@ -10,13 +10,40 @@
 # cnn
 ## 流程说明：
 ### 特征提取
-MaxPool2D → Conv2D → BatchNorm2D → ReLU → MaxPool2D → AdaptiveAvgPool2D
+  Conv2D → BatchNorm2D → ReLU → MaxPool2D → AdaptiveAvgPool2D
 ### 分类
-Flatten → Linear → ReLU → DropOut → Linear
-
-浓缩特征 → 扩展表达 → 筛选有效特征 → 防过拟合 → 输出结果
+  Flatten → Linear → ReLU → DropOut → Linear
+  
+  浓缩特征 → 扩展表达（升维，提升模型的表征能力） → 引入非线性 → 防过拟合 → 分类，输出结果
 
 ## 核心部件说明
+### Conv2D
+- 通过滑动窗口，将局部特征浓缩成特征值；
+- 第一次输入时，input shape (2, 3, 224, 224)，output shape (2, 64, 224, 224)，3和64都是通道数；
+- 通道含义是特征，输入通道数3，代表有3特征，输出通道是64，代表64种通道（可以理解为人像的肤色，发型等64个特征）；
+- 在合理的padding（(kernel_size-1)//2）时，一次卷积操作，height和weight不变，变的只有通道数，可以理解为将224 * 224个3变成了224 * 224个64;
+- 在单层卷积中，感受野就是卷积核的作用对象，两者大小相同，本例中卷积核为3 * 3 * 3；
+- 卷积核是64 * 3 * 3 * 3， 就是做64次卷积操作，每个通道会遍历一遍输入，做卷积；
+- 
+- 代码如下
+  ```python
+  # 填充，即给原来的输入加上边；
+  x_pad = np.pad(x, ((0,0), (0,0), (self.padding, self.padding), (self.padding, self.padding)), mode='constant') 
+  out = np.zeros((batch, out_c, out_H, out_W)) #输出的buf
+  out_H，out_W是底层的像素转换后的二维向量的大小，计算方式是，输入的H + 2* padding - 卷积核H + 1
+
+  for b in range(batch):  # 遍历每个样本
+    for c_out in range(out_c):  # 遍历每个输出通道
+        for h in range(out_H):  # 遍历输出高度
+            for w in range(out_W):  # 遍历输出宽度
+                field = x_pad[b, :, h:h+kernel_size, w:w+kernel_size] # 提取当前位置的输入局部区域（感受野）
+                # 卷积计算：感受野与卷积核相乘求和 + 偏置
+                out[b, c_out, h, w] = np.sum(field * self.kernel[c_out]) + self.bias[c_out]
+    ```
+
+
+### MaxPool2D
+  
 ### AdaptiveAvgPool2D
 - 用空间维度的平均值代表该通道的整体特征，相当于对特征图做 “全局压缩”，保留通道的整体强度信息；
   
