@@ -244,6 +244,51 @@ graph LR
 ### 输出归一化+投影
 - 对decoder的结果进行归一化,并投影到输出维度,(1, 15, 512) -> (1, 15, 10000)
 
+# gpt-3
+## decoder-only说明
+- 丢弃了transformer的encoder，保留decoder；
+- 自回归的序列生成， 保留核心模块CausalSelfAttention(因果自注意力)；
+
+## 模块说明
+### CausalSelfAttention
+- qkv_proj，将多头的qkv融合，假设，d_k(每个头的维度)=64, n_head=12，则qkv_proj的输出等于d_k * n_head * 3
+- 计算完再将输出拆成q，k，v，再分头；
+- 注意力计算，输出投影，同transformer；
+---
+- CausalSelfAttention核心是causal_mask，它是一个单位下三角矩阵；
+- 为什么是针对attn_scores做mask？
+
+  因为attn_scores代表当前位置对 “未来位置” 的关注度，这里做mask，确保第n个位置看不到之后的位置的信息；
+- CausalSelfAttention输入是一个序列（包含词嵌入和位置信息），输出是带有上文感知的序列；
+
+### TransformerDecoderBlock
+    def forward(self, x):
+        x = x + self.dropout1(self.attn(self.ln1(x))) # 残差连接 + 注意力(CausalSelfAttention) + LayerNormal
+        x = x + self.ffn(self.ln2(x)) # 残差连接 + 前馈网络 + LayerNormal
+        return x
+- fnn采用了nn.Linear(d_model, 4 * d_model)和nn.Linear(4 * d_model, d_model)两个线性层，通过升维和降维，即增加了参数量，又保持了维度不变；（残差需要）
+
+### 词嵌入和位置嵌入
+    self.token_embedding = nn.Embedding(vocab_size, d_model)
+    self.pos_embedding = nn.Embedding(max_seq_len, d_model) # max_seq_len是最长序列长度，超长了不行
+
+- 都是使用embedding来实现，将位置和词id映射到高纬的稠密表征；
+- 训练中他们是可学习的，推理过程直接查表即可；由于是查表，相同位置，相同词对应embedding是完全一致的；
+
+### forward，预测序列的下一个词的概率
+    x = token_emb + pos_emb  # 词嵌入和位置嵌入相加
+    for layer in self.layers: # 经过所有解码器，即，TransformerDecoderBlock
+      x = layer(x)
+    x = self.ln_final(x) # 对经过解码器块处理后的隐藏特征进行Normal，输出规整语义向量
+    logits = self.output_proj(x)  # [batch, seq_len, vocab_size]，输出 logits
+
+### generate，根据已有序列，生成完整序列
+    for _ in range(max_new_tokens):
+      logits = self.forward(input_ids)  # [batch, seq_len, vocab_size]
+      next_logits = logits[:, -1, :] / temperature  # 取最后一个位置，加温度调节
+      next_token = torch.multinomial(F.softmax(next_logits, dim=-1), num_samples=1)  # 采样下一个 token
+      input_ids = torch.cat([input_ids, next_token], dim=1) # 拼接序列
+
 # dnn trainer
 ## 说明
 - 简单的dnn模型训练,用dnn来模拟函数,y = 3x² + 5
