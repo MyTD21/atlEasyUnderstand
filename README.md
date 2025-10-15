@@ -250,6 +250,10 @@ graph LR
 - 自回归的序列生成， 保留核心模块CausalSelfAttention(因果自注意力)；
 
 ## 模块说明
+### ( q @ k.transpose() ) * v 理解
+- 假设输入长度是10，qkv都是10 * dk的向量，q @ k.transpose()得到一个10 * 10的矩阵，其中第ij个元素，表示第i个词对第j个词的关注度；
+- q @ k.transpose()，再乘以v，得到一个10 * dk的向量，尺寸和输入相同，但是这个向量已经包含了上下文感知的信息；
+  
 ### CausalSelfAttention
 - qkv_proj，将多头的qkv融合，假设，d_k(每个头的维度)=64, n_head=12，则qkv_proj的输出等于d_k * n_head * 3
 - 计算完再将输出拆成q，k，v，再分头；
@@ -259,6 +263,11 @@ graph LR
 - 为什么是针对attn_scores做mask？
 
   因为attn_scores代表当前位置对 “未来位置” 的关注度，这里做mask，确保第n个位置看不到之后的位置的信息；
+
+  将attn_scores[1,2]做mask之后，数值为0，确保第1个词对第2个词的关注度为0；
+
+  假设目前已经输入5个词，则加入mask的计算，确保计算第i个词对其他词的关注度时，只计算i之前的词；
+  
 - CausalSelfAttention输入是一个序列（包含词嵌入和位置信息），输出是带有上文感知的序列；
 
 ### TransformerDecoderBlock
