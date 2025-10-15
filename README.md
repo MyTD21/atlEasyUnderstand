@@ -30,6 +30,10 @@
 - 多层卷积，第一层是3 * 3，第二层也是3 * 3，此时感受野必须满足两层的叠加，大小是5 * 5；
 - 卷积核是 64 * 3 * 3 * 3， 就是每个通道都要做一遍卷积操作；
 
+### 池化层
+- pooling这名字很奇怪，其实pooling，可以认为是把前边的资源汇聚，pooling这个单词也有整合资源的意思；
+- Cnn的pooling就是把输入的大尺寸 Tensor，通过 “提取关键信息 + 压缩尺寸”，变成更小的 Tensor；
+
 ## 流程说明：
 ### 特征提取
   Conv2D → BatchNorm2D → ReLU → MaxPool2D → AdaptiveAvgPool2D
@@ -57,10 +61,20 @@
                 # 卷积计算：感受野与卷积核相乘求和 + 偏置
                 out[b, c_out, h, w] = np.sum(field * self.kernel[c_out]) + self.bias[c_out]
     ```
-
+  
+### BatchNorm2D
+- momentum，即当前值乘以历史值，为了消除波动，计算running_mean，running_var；running_mean和running_var仅在推理时使用；
+- 核心理解，np.mean(x, axis=(0, 2, 3))，即对0，2，3维的所有元素求平均，输入(2, 64, 224, 224)，求平均之后得到64个mean；
+- gamma和beta，对最后norm的结果乘以一个缩放指数，再加个bias；
+- gamma和beta是可学习的，改变原来norm均值0, 方差1的分布，适应更多任务；
 
 ### MaxPool2D
-  
+- 作用：对特征图进行 “下采样”（降维），同时保留关键特征并增强模型的鲁棒性；
+- 整体操作和Conv2d很像，都是滑窗计算；
+- 操作区别在于，MaxPool2D没有卷积核，就是单纯的取max计算；同时不改变通道数；
+- 目的区别在于，Conv2d为了提取新的特征，MaxPool2D没有卷积核为了降维，同时保留关键信息；
+
+
 ### AdaptiveAvgPool2D
 - 用空间维度的平均值代表该通道的整体特征，相当于对特征图做 “全局压缩”，保留通道的整体强度信息；
   
