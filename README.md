@@ -298,6 +298,26 @@ graph LR
       next_token = torch.multinomial(F.softmax(next_logits, dim=-1), num_samples=1)  # 采样下一个 token
       input_ids = torch.cat([input_ids, next_token], dim=1) # 拼接序列
 
+# MoE
+## 介绍
+- 定义，让多个 “专家网络” 分别处理不同输入，通过 “门控网络” 动态选择最相关的专家，最后融合专家的输出得到结果；
+- 主体包含：Gating Network，Expert；
+
+## 模块介绍
+### Expert
+- 这里每个专家都用一个Mlp表示，input_dim, hidden_dim, output_dim;
+- 本例中不同专家的参数没什么关系，现实中有些轻量级的专家，是会共享部分层，来降低运算量；
+- 本例中每个专家用一个mlp表示，事实上，Qwen、GPT-4等，专家的核心结构是 升维→激活函数→降维的两层 MLP，与本例差不多；
+  
+### Gating
+- 这里采用了一个input_dim * num_experts的线性层做专家概率计算，再选择topk个专家去工作；
+- 主流模型也多用线性层做选择；只是会加入路由算法，加噪，负载均衡等操作；
+  
+### MoE流程
+- 通过门控网络，选取topk个专家，和专家的权重；
+- 每个专家独立计算，得到输出；
+- 根据专家权重，加权求和，融合专家输出，得出最终结果；
+
 # dnn trainer
 ## 说明
 - 简单的dnn模型训练,用dnn来模拟函数,y = 3x² + 5
