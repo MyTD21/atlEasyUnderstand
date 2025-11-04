@@ -14,16 +14,46 @@
 - 在Transformer之后的文章中，常用FNN表示"输入 → 线性层1(升维) → activation → 线性层2(降维) → 输出"的结构；
 
 # unet
-## 一些概念的理解
+## 概述
+- 核心结构分为编码器（下采样）和解码器（上采样）
+- 编码器，通过逐步下采样，增加通道数，从输入图像中提取特征，浅层输出**细节特征**，高层输出**语义特征**；
+- 解码器，以编码器的高层语义特征（瓶颈层输出）为起点，通过逐步上采样恢复空间维度，同时通过**跳跃连接**融合编码器中同尺寸的低层细节特征;
+- 解码器最终输出是融合了高层语义（“是什么”）和低层细节（“在哪里”）的**特征图**，该特征图与输入图像尺寸一致，可通过输出层（OutConv）转化为像素级分割结果；
+- 最终输出为每个像素的标签，譬如，这个像素是属于天空，还是大地；
+
+## down
+### 操作过程
 - 下采样，通过降低数据的维度（或采样密度），用更少的信息量（m 维，m<n）表示原始数据（n 维），从而减少数据量，但会丢失部分细节信息；
 - nn.MaxPool2d(2)，是指用一个2X2的划窗过信息，一个原始长度是6X6的原始特征图，经过nn.MaxPool2d（2）后变成了3X3的特征图；
 - DoubleConv，通过连续两次卷积操作，提供了强大的特征提取能力;是unet的基础砖块；
 - MaxPool2d负责下采样，扩大感受野，DoubleConv负责提升将通道数翻倍；
 
-## 输入输出,高层特征,底层特征的物理意义
-- 输入，原始视觉信号（图像）
-- 输出，每个像素的标签，譬如，这个像素是属于天空，还是大地；
+      class Down(nn.Module):
+          """下采样：MaxPool -> DoubleConv"""
+          self.maxpool_conv = nn.Sequential(
+              nn.MaxPool2d(2),
+              DoubleConv(in_channels, out_channels)
+          )
 
+          def forward(self, x):
+              return self.maxpool_conv(x)
+
+### 特征理解
+- 低层特征（编码器早期）：空间尺寸大，感受野小 → 侧重细节（边缘、纹理）；
+- 高层特征（编码器后期 / 瓶颈层）：空间尺寸小，感受野大 → 侧重语义（类别、全局）；
+
+## up
+- 上采样并调整尺寸，同时将编码器和解码器特征进行拼接；
+- 以上采样操作为主，基于编码器的高层特征，融合低层细节，逐步恢复空间维度，最终输出 “全局语义 + 局部细节” 的像素级标签；
+  
+        class Up(nn.Module):
+          """上采样：反卷积/双线性插值 + 拼接 + DoubleConv"""
+          def forward(self, x1, x2):
+            x1 = self.up(x1) # 上采样并调整尺寸
+            x1 = F.pad(...)
+            x = torch.cat([x2, x1], dim=1) # 拼接编码器特征(x2)和解码器特征(x1)
+            return self.conv(x)
+  
 ## 代码
     def forward(self, x):
         # 编码器下采样，保存中间特征用于跳跃连接
@@ -42,24 +72,6 @@
        logits = self.outc(x) # 此处x是高维特征，logits是输出的类别概率图
        return logits
 
-    class Down(nn.Module):
-      """下采样：MaxPool -> DoubleConv"""
-      self.maxpool_conv = nn.Sequential(
-          nn.MaxPool2d(2),
-          DoubleConv(in_channels, out_channels)
-      )
-
-      def forward(self, x):
-          return self.maxpool_conv(x)
-
-    class Up(nn.Module):
-      """上采样：反卷积/双线性插值 + 拼接 + DoubleConv"""
-      def forward(self, x1, x2):
-        x1 = self.up(x1) # 上采样并调整尺寸
-        x1 = F.pad(...)
-        x = torch.cat([x2, x1], dim=1) # 拼接编码器特征(x2)和解码器特征(x1)
-        return self.conv(x)
-          
 ## QA
 - 下采样为什么可以扩大感受野？通过模型聚合局部区域的特征，让特征图上的单个像素对应原始输入图像的更大区域；
 - 什么是跳跃连接？
