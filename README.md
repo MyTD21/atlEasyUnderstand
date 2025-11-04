@@ -334,7 +334,7 @@ graph LR
 - Adaptive ​Moment Estimation,自适应矩估计;
 - 他的自适应主要体现在,​每个参数都有不同的、随时间调整的学习率;相比于sgd(全局用一个lr),在当时看起来很先进;
 - sgd做法比较简单粗暴,weight -= learning_rate * grad
-  
+
 ### 一阶矩,二阶矩
 - 一阶矩(exp_avg),模拟动量,惯性;代表参数更新的主要方向;可以不严谨的理解为"行走的方向和决心";
 - 二阶矩(exp_avg_sq), 模拟波动性,描述运动稳定性;如果波动性大,就小步更新,避免震荡;
@@ -377,3 +377,10 @@ graph LR
     
         squared_error = (y_pred - y_true) **2
         squared_error = squared_error.mean(),# 根据reduction选择返回mean还是sum;
+
+## show_backward_effect函数
+- 这是一个单纯的演示grad变化的函数，对训练没有用处；
+- 正向传播时，计算图会记录传输关系，x → (×w) → ( +b ) → y_pred → (MSE) → loss
+- 调用loss.backward()时，PyTorch 会从损失值 loss 出发, 沿着计算图反向遍历, 根据链式法则, 依次计算损失对每个中间变量(如 y_pred、w*x)和参数(w,b)的梯度；
+- 计算得到的梯度，会被存储于变量的 grad 属性中；
+
