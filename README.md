@@ -436,7 +436,33 @@ graph LR
 
   推理时图像生成是逐步去噪，无法一步到位；
 
+### 如何训练，推理文生图模型？
+#### 训练
+- 训练数据是一张图片和他的文本描述，引入文本embedding，将文本映射到高维空间；
+- 正向扩散不变；
+- 反向扩散中，在下采样，上采样环节中加入和文本embedding的cross-attention，让图像表征更加关注文本描述的细节；
+- 代码如下，其中h2，h3表示特征，而h2_attn，h3_attn表示融合文本语义的定向特征；
 
+      def forward(self, x, t, text_emb):
+        ...
+        # 下采样2（带文本注意力）
+        h2 = self.down2(h1_pooled) + t_emb.repeat(1, 2, 1, 1)  # [batch, dim*2, h/2, w/2]
+        ...
+        h2_attn = self.attn2(h2_flat, text_emb).transpose(1, 2).view(b, c, h, w)  # 文本引导
+        
+        # 上采样1
+        h3 = self.upsample(h2_attn)  # [batch, dim*2, h, w]
+        
+        # 上采样2（带文本注意力）
+        ...
+        h3_attn = self.attn1(h3_flat, text_emb).transpose(1, 2).view(b, c, h, w)  # 文本引导
+        out = self.up2(h3_attn)  # [batch, channels, h, w]
+        
+        return out  # 预测的噪声
+
+  #### 推理
+  - 文生图，是没有原始图像输入的，随机初始化一个噪声张量作为输入；
+  - 预测噪声，反向扩散，多步迭代和标准的diffusion模型基本一致；
 
 # dnn trainer
 ## 说明
