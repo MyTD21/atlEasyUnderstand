@@ -1,3 +1,12 @@
+# DiT
+## 说明
+- DiT（Diffusion Transformer）是扩散模型（Diffusion Models）的一个重要分支；
+- Transformer块取代了传统扩散模型中常用的U-Net主干网络，正向加噪创造数据，反向去噪训练模型的主旨和diffusion保持一致；
+
+## 核心组件
+### PatchEmbed
+- 连接图像和Transformer的核心组件；解决了Transformer只能处理一维信息的局限性；
+- 假设输入是[8, 3, 32, 32]（batch8，3通道，32x32 像素），patch_size为 4x4，则总块数 num_patches=(32//4)** 2=8x8=64；同时将输入通道3，映射到embed_dim；输出向量为，[8，64,128]，即，用64个特征来表示原图片，每个特征是128维；
 
 # dnn
 ## 说明
