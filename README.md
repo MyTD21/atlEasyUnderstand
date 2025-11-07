@@ -1,12 +1,4 @@
-# DiT
-## 说明
-- DiT（Diffusion Transformer）是扩散模型（Diffusion Models）的一个重要分支；
-- Transformer块取代了传统扩散模型中常用的U-Net主干网络，正向加噪创造数据，反向去噪训练模型的主旨和diffusion保持一致；
 
-## 核心组件
-### PatchEmbed
-- 连接图像和Transformer的核心组件；解决了Transformer只能处理一维信息的局限性；
-- 假设输入是[8, 3, 32, 32]（batch8，3通道，32x32 像素），patch_size为 4x4，则总块数 num_patches=(32//4)** 2=8x8=64；同时将输入通道3，映射到embed_dim；输出向量为，[8，64,128]，即，用64个特征来表示原图片，每个特征是128维；
 
 # dnn
 ## 说明
@@ -472,6 +464,37 @@ graph LR
   #### 推理
   - 文生图，是没有原始图像输入的，随机初始化一个噪声张量作为输入；
   - 预测噪声，反向扩散，多步迭代和标准的diffusion模型基本一致；
+
+# DiT
+## 说明
+- DiT（Diffusion Transformer）是扩散模型（Diffusion Models）的一个重要分支；
+- 用Transformer取代了传统扩散模型中的U-Net主干网络，正向加噪创造数据，反向去噪训练模型的主旨和diffusion保持一致；
+- Transformer的好处是attention比卷积能更好的处理全局信息，更加精准，分辨率更高；
+
+## 核心组件
+### PatchEmbed
+- 连接图像和Transformer的核心组件；解决了Transformer只能处理一维信息的局限性；
+- 假设输入是[8, 3, 32, 32]（batch8，3通道，32x32 像素），patch_size为 4x4，则总块数 num_patches=(32//4)** 2=8x8=64；同时将输入通道3，映射到embed_dim；输出向量为，[8，64,128]，即，用64个特征来表示原图片，每个特征是128维；
+
+### 代码
+    def forward(self, x, t, text_emb):
+        # 1. 图像分块嵌入
+        x = self.patch_embed(x)  # [batch, num_patches, hidden_dim]
+
+        # 2. 时间嵌入与文本嵌入融合
+        t_emb = self.time_embed(t)  # [batch, hidden_dim]
+        text_emb_proj = self.text_proj(text_emb)  # [batch, hidden_dim]
+        x = x + t_emb.unsqueeze(1) + text_emb_proj.unsqueeze(1)  # 广播到所有patch
+
+        # 3. Transformer块序列
+        for block in self.transformer_blocks:
+            x = block(x, text_emb)
+
+        # 4. 预测噪声（还原为图像形状）
+        noise_pred = self.head(x)  # [batch, num_patches, patch_size^2 * 3]
+        # 重组为图像：[batch, num_patches, 3, patch_size, patch_size]
+        ...
+        return noise_pred
 
 # dnn trainer
 ## 说明
