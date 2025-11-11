@@ -337,9 +337,9 @@ graph LR
 
 ### 训练流程
 1. 提取mel特征；
-2. 对mel特征量化，通过RandomProjectionQuantizer的投影，计算相似度等操作，得到最佳离散表征target_codes；
+2. 对mel特征量化，通过RandomProjectionQuantizer投影得到***随机投影特征***，再计算相似度，得到target_codes（***离散量化标记***）；
 3. 计算随机的mask，并对mel进行掩码操作，得到mel_masked；
-4. mel_masked经过ConformerEncoder，得到高维编码特征enc_feat；
+4. mel_masked经过ConformerEncoder，得到***编码特征向量***enc_feat；
 5. enc_feat经过predictor，投影到量化标记的预测空间logits；
 6. logits和target_codes计算loss，更新encoder和predictor参数；
 
